@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "SeamlessCoopManager (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "SeamlessCoopManager (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
