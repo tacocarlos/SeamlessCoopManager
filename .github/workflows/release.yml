@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+# Prevent two tag pushes from racing each other mid-upload.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Tag "v1.2.3" -> version "1.2.3"
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # PublishTrimmed is disabled explicitly: trimming frequently breaks
+      # WinUI 3 apps (XAML reflection / WinRT projections).
+      - name: Publish
+        run: >
+          dotnet publish SeamlessCoopManager/SeamlessCoopManager.csproj
+          -c Release
+          -r win-x64
+          -p:Platform=x64
+          --self-contained
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:PublishTrimmed=false
+          -o publish
+
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+
+      # Fetch the previous release so vpk can generate delta packages.
+      # Allowed to fail on the very first release (nothing to download yet).
+      - name: Download previous release
+        continue-on-error: true
+        run: >
+          vpk download github
+          --repoUrl https://github.com/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pack
+        run: >
+          vpk pack
+          --packId SeamlessCoopManager
+          --packVersion ${{ steps.version.outputs.version }}
+          --packDir publish
+          --mainExe SeamlessCoopManager.exe
+          --packTitle "Seamless Co-op Manager"
+
+      - name: Upload release
+        run: >
+          vpk upload github
+          --repoUrl https://github.com/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+          --publish
+          --releaseName "Seamless Co-op Manager ${{ steps.version.outputs.version }}"
+          --tag ${{ github.ref_name }}
