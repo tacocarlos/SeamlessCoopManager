@@ -21,10 +21,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The SDK feature band is pinned by global.json. 8.0.x is also installed to
+      # provide the net8.0 targeting pack and runtime that the project targets.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       # Tag "v1.2.3" -> version "1.2.3"
       - name: Extract version from tag
@@ -32,8 +36,9 @@ jobs:
         shell: bash
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      # PublishTrimmed is disabled explicitly: trimming frequently breaks
-      # WinUI 3 apps (XAML reflection / WinRT projections).
+      # Publish settings (including PublishTrimmed=false and EnableMsixTooling=true,
+      # which emits the .pri resource index the app needs to start) live in the
+      # csproj so that local publishes match what is shipped here.
       - name: Publish
         run: >
           dotnet publish SeamlessCoopManager/SeamlessCoopManager.csproj
@@ -42,11 +47,23 @@ jobs:
           -p:Platform=x64
           --self-contained
           -p:Version=${{ steps.version.outputs.version }}
-          -p:PublishTrimmed=false
           -o publish
 
+      # The vpk CLI and the Velopack library must be the same version, so read the
+      # version straight from the csproj instead of hardcoding it in two places.
+      - name: Resolve Velopack version
+        id: velopack
+        shell: pwsh
+        run: |
+          $csproj = 'SeamlessCoopManager/SeamlessCoopManager.csproj'
+          $node = ([xml](Get-Content $csproj)).SelectSingleNode("//PackageReference[@Include='Velopack']")
+          if (-not $node -or -not $node.Version) {
+            throw "Could not resolve the Velopack PackageReference version from $csproj"
+          }
+          "version=$($node.Version)" >> $env:GITHUB_OUTPUT
+
       - name: Install Velopack CLI
-        run: dotnet tool install -g vpk
+        run: dotnet tool install -g vpk --version ${{ steps.velopack.outputs.version }}
 
       # Fetch the previous release so vpk can generate delta packages.
       # Allowed to fail on the very first release (nothing to download yet).

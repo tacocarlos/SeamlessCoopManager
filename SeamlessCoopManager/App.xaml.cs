@@ -83,10 +83,9 @@ namespace SeamlessCoopManager
 				if (newVersion is null)
 					return; // already up to date
 
-				await mgr.DownloadUpdatesAsync(newVersion);
+				mgr.DownloadUpdates(newVersion);
 
-				// Apply silently once the app exits; the next launch runs the new version.
-				mgr.WaitExitThenApplyUpdates(newVersion, silent: true, restart: false);
+				mgr.ApplyUpdatesAndRestart(newVersion);
 			}
 			catch
 			{

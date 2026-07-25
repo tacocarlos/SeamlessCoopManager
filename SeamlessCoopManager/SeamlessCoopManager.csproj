@@ -12,6 +12,12 @@
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Required even for unpackaged apps: this enables the MSIX/PRI tooling that emits
+         the app's resource index (SeamlessCoopManager.pri, with the compiled .xbf XAML
+         embedded) into the *publish* output. Without it `dotnet build` output runs but
+         `dotnet publish` output crashes at startup, because LoadComponent cannot
+         resolve ms-appx:///App.xaml. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <Nullable>enable</Nullable>
 	<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
@@ -41,7 +47,11 @@
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+    <!-- Kept off for all configurations so that a local `dotnet publish -c Release`
+         produces the same binary shape the release workflow ships. Trimming is not
+         supported for WinUI 3: XAML types and WinRT projections are resolved
+         reflectively, so the trimmer can strip types that are only referenced from
+         markup or built in code-behind. -->
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 </Project>
