@@ -7,6 +7,8 @@ using static SeamlessCoopManager.Manager.ModApplicator;
 using IniParser;
 using IniParser.Model;
 using System.Diagnostics;
+using Windows.UI.Popups;
+using System.Threading.Tasks;
 
 namespace SeamlessCoopManager.Manager
 {
@@ -15,9 +17,11 @@ namespace SeamlessCoopManager.Manager
 
 		public class GameName
 		{
-			private string _short, _long, _execName;
+			private string _short, _long, _execName, _settingsName;
 
 			private int _steamAppId;
+
+			public string SettingsName { get => _settingsName;  }
 			public string ShortName { get => _short; }
 			public string LongName { get => _long; }
 
@@ -25,12 +29,13 @@ namespace SeamlessCoopManager.Manager
 
 			public int SteamAppId { get => _steamAppId; }
 
-			public GameName(string shortName, string longName, string execName, int appId)
+			public GameName(string shortName, string longName, string execName, string settingsName, int appId)
 			{
 				_short = shortName;
 				_long = longName;
 				_execName = execName;
 				_steamAppId = appId;
+				_settingsName = settingsName;
 			}
 
 
@@ -43,15 +48,21 @@ namespace SeamlessCoopManager.Manager
 			private string? _installPath, _execPath;
 			private bool _retainOptions;
 
+			private string _sessionPassword;
+
 			public string? InstallPath { get => _installPath; }
 			public string? ExecPath { get => _execPath; }
 			public bool RetainOptions { get => _retainOptions; }
+
+			public string SessionPassword { get => _sessionPassword; }
+
 
 			private GameOptions()
 			{
 				_installPath = null;
 				_execPath = null;
 				_retainOptions = true;
+				_sessionPassword = "";
 			}
 
 			public static GameOptions GetDefault()
@@ -85,15 +96,26 @@ namespace SeamlessCoopManager.Manager
 				_retainOptions = retain;
 				return true;
 			}
+
+			public bool SetSessionPassword(string? sessionPassword)
+			{
+				if (!string.IsNullOrEmpty(sessionPassword))
+				{
+					_sessionPassword = sessionPassword;
+					return true;
+				}
+
+				return false;
+			}
 		}
 
-		private static readonly GameName DSR_NAME = new GameName("DSR", "Dark Souls: Remastered", "ds1sc_launcher.exe", 570940);
-		private static readonly GameName DS2_NAME = new GameName("DS2", "Dark Souls 2: Scholar of the First Sin", "ds2sc_launcher.exe", 335300); // TODO: verify this is the name when the public build releases
-		private static readonly GameName DS3_NAME = new GameName("DS3", "Dark Souls 3", "ds3sc_launcher.exe", 374320);
-		private static readonly GameName SEKIRO_NAME = new GameName("SEKIRO", "Sekiro: Shadows Die Twice", "sekiro_coop_launcher.exe", 814380); // TODO: update this when Yui releases the Sekiro mod
-		private static readonly GameName ELDEN_RING_NAME = new GameName("ELDEN_RING", "Elden Ring", "ersc_launcher.exe", 1245620);
-		private static readonly GameName AC6_NAME = new GameName("AC6", "ARMORED CORE 6: Fires of Rubicon", "ac6_for_coop_launcher.exe", 1888160);
-		private static readonly GameName NIGHTREIGN_NAME = new GameName("NIGHTREIGN", "Elden Ring Nightreign", "nrsc_launcher.exe", 2622380);
+		private static readonly GameName DSR_NAME = new GameName("DSR", "Dark Souls: Remastered", "ds1sc_launcher.exe", "ds1sc_settings.ini", 570940);
+		private static readonly GameName DS2_NAME = new GameName("DS2", "Dark Souls 2: Scholar of the First Sin", "ds2sc_launcher.exe", "ds2sc_settings.ini", 335300); // TODO: verify this is the name when the public build releases
+		private static readonly GameName DS3_NAME = new GameName("DS3", "Dark Souls 3", "ds3sc_launcher.exe", "ds3sc_settings.ini", 374320);
+		// private static readonly GameName SEKIRO_NAME = new GameName("SEKIRO", "Sekiro: Shadows Die Twice", "sekiro_coop_launcher.exe", "ds1sc_settings.ini", 814380); // TODO: update this when Yui releases the Sekiro mod
+		private static readonly GameName ELDEN_RING_NAME = new GameName("ELDEN_RING", "Elden Ring", "ersc_launcher.exe", "ersc_settings.ini", 1245620);
+		private static readonly GameName AC6_NAME = new GameName("AC6", "ARMORED CORE 6: Fires of Rubicon", "ac6_for_coop_launcher.exe", "ac6_coop_settings.ini", 1888160);
+		private static readonly GameName NIGHTREIGN_NAME = new GameName("NIGHTREIGN", "Elden Ring Nightreign", "nrsc_launcher.exe", "nrsc_settings.ini", 2622380);
 
 
 		public static readonly IReadOnlyList<Game> All = new List<Game>
@@ -159,6 +181,11 @@ namespace SeamlessCoopManager.Manager
 			return !string.IsNullOrEmpty(this.Options.ExecPath) && Path.Exists(this.Options.ExecPath);
 		}
 
+		public String GetSettingsFileName()
+		{
+			return _name.SettingsName;
+		}
+
 		public int GetSteamAppId()
 		{
 			return _name.SteamAppId;
@@ -190,7 +217,7 @@ namespace SeamlessCoopManager.Manager
 			}
 			FileIniDataParser parser = new FileIniDataParser();
 			IniData data = new IniData();
-			foreach(Game game in All)
+			foreach (Game game in All)
 			{
 				string sectionName = game.ShortName;
 				data[sectionName]["InstallPath"] = game.Options.InstallPath ?? "";
@@ -208,6 +235,7 @@ namespace SeamlessCoopManager.Manager
 				ConfigFile = GameOptions.MANAGER_SETTINGS_PATH;
 				directoryPath = Path.GetDirectoryName(ConfigFile);
 			}
+			Console.WriteLine($"Loading values from {ConfigFile ?? ""}");
 
 
 			if (Directory.Exists(directoryPath) == false)
@@ -221,6 +249,7 @@ namespace SeamlessCoopManager.Manager
 			IniData options = parser.ReadFile(ConfigFile);
 			foreach(Game game in All)
 			{
+				Console.WriteLine($"==================== Loading {game} ====================");
 				string sectionName = game.ShortName;
 				if (options.Sections.ContainsSection(sectionName))
 				{
@@ -238,11 +267,34 @@ namespace SeamlessCoopManager.Manager
 					game.Options.SetRetainOptions(true);
 				}
 
-				if(string.IsNullOrEmpty(game.Options.InstallPath))
+				if (string.IsNullOrEmpty(game.Options.InstallPath))
 				{
 					string? installPath = SteamGameLocator.GetInstallPath(game.GetSteamAppId());
 					Console.WriteLine(installPath);
 					game.Options.SetInstallPath(Path.Join(installPath, game.RelativeGamePath));
+				}
+				
+				Console.WriteLine($"Checking if {game.Options.InstallPath} exists");
+				// Probe seamless coop ini for password
+				if(Directory.Exists(game.Options.InstallPath))
+				{
+					Console.WriteLine($"{game} Install Path Recognized");
+
+					ModApplicator applicator = Applicators.GetApplicator(game);
+					string settingsFilePath = Path.Join(game.Options.InstallPath, applicator.GetRelativeSettingsIniPath());
+					if (!File.Exists(settingsFilePath))
+					{
+						continue;
+					}
+
+					FileIniDataParser settingsParser = new FileIniDataParser();
+					IniData settingsData = settingsParser.ReadFile(settingsFilePath);
+					if(settingsData.Sections.ContainsSection("PASSWORD"))
+					{
+						string password = settingsData["PASSWORD"]["cooppassword"];
+						Console.WriteLine($"Session Password: {password}");
+						game.Options.SetSessionPassword(password);
+					}
 				}
 			}
 		}

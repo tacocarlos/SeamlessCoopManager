@@ -115,6 +115,21 @@
                     Click="BrowseDirectory_Click" />
             </Grid>
 
+            <!-- Password -->
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBox
+                    x:Name="SessionPassword"
+                    Grid.Column="0"
+                    Header="Session Password"
+                    PlaceholderText="Enter Session Password"
+                    IsReadOnly="False"/>
+            </Grid>
+
             <!-- Game executable -->
             <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
