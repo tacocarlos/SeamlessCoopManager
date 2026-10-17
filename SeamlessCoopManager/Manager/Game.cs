@@ -7,6 +7,8 @@ using static SeamlessCoopManager.Manager.ModApplicator;
 using IniParser;
 using IniParser.Model;
 using System.Diagnostics;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Windows.UI.Popups;
 using System.Threading.Tasks;
 
@@ -70,9 +72,16 @@ namespace SeamlessCoopManager.Manager
 				return new GameOptions();
 			}
 
+			// null or empty clears the path; a path that doesn't exist is rejected and the old value kept
 			public bool SetInstallPath(string? path)
 			{
-				if(!string.IsNullOrEmpty(path) && Directory.Exists(path))
+				if (string.IsNullOrEmpty(path))
+				{
+					_installPath = null;
+					return true;
+				}
+
+				if (Directory.Exists(path))
 				{
 					_installPath = path;
 					return true;
@@ -81,9 +90,16 @@ namespace SeamlessCoopManager.Manager
 				return false;
 			}
 
+			// null or empty clears the path; a path that doesn't exist is rejected and the old value kept
 			public bool SetExecPath(string? path)
 			{
-				if (!string.IsNullOrEmpty(path) && File.Exists(path))
+				if (string.IsNullOrEmpty(path))
+				{
+					_execPath = null;
+					return true;
+				}
+
+				if (File.Exists(path))
 				{
 					_execPath = path;
 					return true;
@@ -106,6 +122,29 @@ namespace SeamlessCoopManager.Manager
 				}
 
 				return false;
+			}
+
+			public void ClearSessionPassword()
+			{
+				_sessionPassword = "";
+			}
+
+			private static readonly JsonSerializerOptions TO_STRING_JSON_OPTIONS = new JsonSerializerOptions
+			{
+				WriteIndented = true,
+				Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // only used for display, never parsed
+			};
+
+			// The password is masked so options can be logged without leaking it.
+			public override string ToString()
+			{
+				return JsonSerializer.Serialize(new
+				{
+					InstallPath,
+					ExecPath,
+					RetainOptions,
+					SessionPassword = _sessionPassword
+				}, TO_STRING_JSON_OPTIONS);
 			}
 		}
 
@@ -271,32 +310,64 @@ namespace SeamlessCoopManager.Manager
 				{
 					string? installPath = SteamGameLocator.GetInstallPath(game.GetSteamAppId());
 					Console.WriteLine(installPath);
-					game.Options.SetInstallPath(Path.Join(installPath, game.RelativeGamePath));
-				}
-				
-				Console.WriteLine($"Checking if {game.Options.InstallPath} exists");
-				// Probe seamless coop ini for password
-				if(Directory.Exists(game.Options.InstallPath))
-				{
-					Console.WriteLine($"{game} Install Path Recognized");
-
-					ModApplicator applicator = Applicators.GetApplicator(game);
-					string settingsFilePath = Path.Join(game.Options.InstallPath, applicator.GetRelativeSettingsIniPath());
-					if (!File.Exists(settingsFilePath))
+					if (!string.IsNullOrEmpty(installPath))
 					{
-						continue;
-					}
-
-					FileIniDataParser settingsParser = new FileIniDataParser();
-					IniData settingsData = settingsParser.ReadFile(settingsFilePath);
-					if(settingsData.Sections.ContainsSection("PASSWORD"))
-					{
-						string password = settingsData["PASSWORD"]["cooppassword"];
-						Console.WriteLine($"Session Password: {password}");
-						game.Options.SetSessionPassword(password);
+						game.Options.SetInstallPath(Path.Join(installPath, game.RelativeGamePath));
 					}
 				}
+
+				game.ProbeSessionPassword();
+
+				Console.WriteLine(game.Options);
 			}
+		}
+
+		// Path to the mod's settings ini inside the install folder, or null if the game isn't installed.
+		public string? GetSettingsIniPath()
+		{
+			if (!IsInstalled())
+			{
+				return null;
+			}
+
+			return Path.Join(Options.InstallPath, Applicators.GetApplicator(this).GetRelativeSettingsIniPath());
+		}
+
+		// Reloads the session password from the mod's settings ini. Returns false if there is no settings file.
+		public bool ProbeSessionPassword()
+		{
+			Options.ClearSessionPassword();
+
+			string? settingsFilePath = GetSettingsIniPath();
+			if (settingsFilePath == null || !File.Exists(settingsFilePath))
+			{
+				return false;
+			}
+
+			FileIniDataParser settingsParser = new FileIniDataParser();
+			IniData settingsData = settingsParser.ReadFile(settingsFilePath);
+			if (settingsData.Sections.ContainsSection("PASSWORD"))
+			{
+				Options.SetSessionPassword(settingsData["PASSWORD"]["cooppassword"]);
+			}
+			return true;
+		}
+
+		// Writes a new session password to the mod's settings ini. Returns false if the password is empty
+		// or the mod's settings file doesn't exist yet.
+		public bool SaveSessionPassword(string? password)
+		{
+			string? settingsFilePath = GetSettingsIniPath();
+			if (string.IsNullOrEmpty(password) || settingsFilePath == null || !File.Exists(settingsFilePath))
+			{
+				return false;
+			}
+
+			FileIniDataParser parser = new FileIniDataParser();
+			IniData settingsData = ModApplicator.SetSessionPassword(parser.ReadFile(settingsFilePath), password);
+			parser.WriteFile(settingsFilePath, settingsData);
+			Options.SetSessionPassword(password);
+			return true;
 		}
 
 		public ModApplicationResult UpdateMod(ModApplicator applicator, string modZipPath)

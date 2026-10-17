@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+# Prevent two tag pushes from racing each other mid-upload.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The SDK feature band is pinned by global.json. 8.0.x is also installed to
+      # provide the net8.0 targeting pack and runtime that the project targets.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # Tag "v1.2.3" -> version "1.2.3"
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # Publish settings (including PublishTrimmed=false and EnableMsixTooling=true,
+      # which emits the .pri resource index the app needs to start) live in the
+      # csproj so that local publishes match what is shipped here.
+      - name: Publish
+        run: >
+          dotnet publish SeamlessCoopManager/SeamlessCoopManager.csproj
+          -c Release
+          -r win-x64
+          -p:Platform=x64
+          --self-contained
+          -p:Version=${{ steps.version.outputs.version }}
+          -o publish
+
+      # The vpk CLI and the Velopack library must be the same version, so read the
+      # version straight from the csproj instead of hardcoding it in two places.
+      - name: Resolve Velopack version
+        id: velopack
+        shell: pwsh
+        run: |
+          $csproj = 'SeamlessCoopManager/SeamlessCoopManager.csproj'
+          $node = ([xml](Get-Content $csproj)).SelectSingleNode("//PackageReference[@Include='Velopack']")
+          if (-not $node -or -not $node.Version) {
+            throw "Could not resolve the Velopack PackageReference version from $csproj"
+          }
+          "version=$($node.Version)" >> $env:GITHUB_OUTPUT
+
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk --version ${{ steps.velopack.outputs.version }}
+
+      # Fetch the previous release so vpk can generate delta packages.
+      # Allowed to fail on the very first release (nothing to download yet).
+      - name: Download previous release
+        continue-on-error: true
+        run: >
+          vpk download github
+          --repoUrl https://github.com/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pack
+        run: >
+          vpk pack
+          --packId SeamlessCoopManager
+          --packVersion ${{ steps.version.outputs.version }}
+          --packDir publish
+          --mainExe SeamlessCoopManager.exe
+          --packTitle "Seamless Co-op Manager"
+
+      - name: Upload release
+        run: >
+          vpk upload github
+          --repoUrl https://github.com/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+          --publish
+          --releaseName "Seamless Co-op Manager ${{ steps.version.outputs.version }}"
+          --tag ${{ github.ref_name }}

@@ -126,6 +126,7 @@ namespace SeamlessCoopManager
 			BrowseDirectoryButton.IsEnabled = true;
 			BrowseExecutableButton.IsEnabled = true;
 			RetainSettingsCheckBox.IsEnabled = true;
+			LoadSessionPassword(game);
 		}
 
 		private void ClearGameControls()
@@ -139,6 +140,69 @@ namespace SeamlessCoopManager
 			BrowseDirectoryButton.IsEnabled = false;
 			BrowseExecutableButton.IsEnabled = false;
 			RetainSettingsCheckBox.IsEnabled = false;
+			SessionPassword.Text = string.Empty;
+			SessionPassword.IsEnabled = false;
+			SavePasswordButton.IsEnabled = false;
+		}
+
+		// ── Session password ──────────────────────────────────────────────────────
+
+		// Re-reads the password from the mod's settings file. The box is disabled when the
+		// mod isn't installed yet, since there's no settings file to write to.
+		private void LoadSessionPassword(Game game)
+		{
+			bool hasSettingsFile = game.ProbeSessionPassword();
+			SessionPassword.Text = game.Options.SessionPassword;
+			SessionPassword.IsEnabled = hasSettingsFile;
+			SessionPassword.PlaceholderText = hasSettingsFile
+				? "Enter Session Password"
+				: "Apply the mod first to set a password";
+			RefreshSavePasswordButton();
+		}
+
+		private void RefreshSavePasswordButton()
+		{
+			SavePasswordButton.IsEnabled = GameComboBox.SelectedItem is Game game
+				&& SessionPassword.IsEnabled
+				&& !string.IsNullOrEmpty(SessionPassword.Text)
+				&& SessionPassword.Text != game.Options.SessionPassword;
+		}
+
+		private void SessionPassword_TextChanged(object sender, TextChangedEventArgs e)
+		{
+			RefreshSavePasswordButton();
+		}
+
+		private async void SavePassword_Click(object sender, RoutedEventArgs e)
+		{
+			if (GameComboBox.SelectedItem is not Game game)
+				return;
+
+			bool saved;
+			try
+			{
+				saved = game.SaveSessionPassword(SessionPassword.Text);
+			}
+			catch (Exception ex)
+			{
+				Console.Error.WriteLine($"Error saving {game.ShortName} session password: {ex.Message}");
+				saved = false;
+			}
+
+			RefreshSavePasswordButton();
+			if (saved)
+				return;
+
+			var dialog = new ContentDialog
+			{
+				Title = "Couldn't save password",
+				Content = "The session password could not be written to the mod's settings file. " +
+				          "Make sure the game is not running and try again.",
+				CloseButtonText = "OK",
+				DefaultButton = ContentDialogButton.Close,
+				XamlRoot = Content.XamlRoot,
+			};
+			await dialog.ShowAsync();
 		}
 
 		// ── Install directory ─────────────────────────────────────────────────────
@@ -162,6 +226,7 @@ namespace SeamlessCoopManager
 
 			InstallPathBox.Text = folder.Path;
 			Game.WriteManagerConfig();
+			LoadSessionPassword(game);
 			RefreshButtons();
 
 			await PromptProbeForExecutable(game);
@@ -313,10 +378,15 @@ namespace SeamlessCoopManager
 
 			ApplyButton.Content = "Apply Update";
 
+			// Applying can create the settings file or reset it when settings aren't retained.
+			LoadSessionPassword(game);
+
 			await ShowUpdateResultDialog(game, result);
 
 			RefreshButtons();
 		}
+
+		
 
 		private async Task ShowUpdateResultDialog(Game game, ModApplicationResult result)
 		{

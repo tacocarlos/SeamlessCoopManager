@@ -40,5 +40,6 @@ namespace SeamlessCoopManager.Manager.GameApplicators
 			}
 			return ModApplicationResult.FAILED_UNKNOWN;
 		}
+
 	}
 }

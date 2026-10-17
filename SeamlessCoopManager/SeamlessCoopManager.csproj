@@ -1,19 +1,29 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
     <OutputType Condition="'$(Configuration)' != 'Debug'">WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>SeamlessCoopManager</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Platforms>x86;x64;ARM64</Platforms>
-    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <Platforms>x86;x64</Platforms>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$(Platform)</RuntimeIdentifier>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
 	<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
 	  <SelfContained>true</SelfContained>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Required even for unpackaged apps: this enables the MSIX/PRI tooling that emits
+         the app's resource index (SeamlessCoopManager.pri, with the compiled .xbf XAML
+         embedded) into the *publish* output. Without it `dotnet build` output runs but
+         `dotnet publish` output crashes at startup, because LoadComponent cannot
+         resolve ms-appx:///App.xaml. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <Nullable>enable</Nullable>
+	<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
 
@@ -27,14 +37,24 @@
     <PackageReference Include="ini-parser-netstandard" Version="2.5.3" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
+
+
+	<PropertyGroup>
+		<StartupObject>SeamlessCoopManager.App</StartupObject>
+	</PropertyGroup>
 
 
   <!-- Publish Properties -->
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+    <!-- Kept off for all configurations so that a local `dotnet publish -c Release`
+         produces the same binary shape the release workflow ships. Trimming is not
+         supported for WinUI 3: XAML types and WinRT projections are resolved
+         reflectively, so the trimmer can strip types that are only referenced from
+         markup or built in code-behind. -->
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 </Project>

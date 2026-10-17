@@ -29,12 +29,65 @@ namespace SeamlessCoopManager.Tests
 		[Theory]
 		[InlineData(null)]
 		[InlineData("")]
-		public void SetInstallPath_RejectsNullOrEmpty(string? path)
+		public void SetInstallPath_NullOrEmptyClearsExistingPath(string? path)
 		{
 			var options = Game.GameOptions.GetDefault();
+			options.SetInstallPath(MakeDir("game"));
 
-			Assert.False(options.SetInstallPath(path));
+			Assert.True(options.SetInstallPath(path));
 			Assert.Null(options.InstallPath);
+		}
+
+		[Theory]
+		[InlineData(null)]
+		[InlineData("")]
+		public void SetExecPath_NullOrEmptyClearsExistingPath(string? path)
+		{
+			var options = Game.GameOptions.GetDefault();
+			options.SetExecPath(MakeFile("x", "launcher.exe"));
+
+			Assert.True(options.SetExecPath(path));
+			Assert.Null(options.ExecPath);
+		}
+
+		[Fact]
+		public void ToString_IsValidJsonWithAllFields()
+		{
+			var options = Game.GameOptions.GetDefault();
+			string dir = MakeDir("game's folder");
+			options.SetInstallPath(dir);
+			options.SetRetainOptions(false);
+
+			using var json = System.Text.Json.JsonDocument.Parse(options.ToString());
+			var root = json.RootElement;
+
+			Assert.Equal(dir, root.GetProperty("InstallPath").GetString());
+			Assert.Equal(System.Text.Json.JsonValueKind.Null, root.GetProperty("ExecPath").ValueKind);
+			Assert.False(root.GetProperty("RetainOptions").GetBoolean());
+			Assert.Equal("", root.GetProperty("SessionPassword").GetString());
+		}
+
+		[Fact]
+		public void ToString_MasksSessionPassword()
+		{
+			var options = Game.GameOptions.GetDefault();
+			options.SetSessionPassword("hunter2");
+
+			string text = options.ToString();
+
+			Assert.DoesNotContain("hunter2", text);
+			Assert.Contains("\"SessionPassword\": \"********\"", text);
+		}
+
+		[Fact]
+		public void ClearSessionPassword_ResetsToEmpty()
+		{
+			var options = Game.GameOptions.GetDefault();
+			options.SetSessionPassword("hunter2");
+
+			options.ClearSessionPassword();
+
+			Assert.Equal("", options.SessionPassword);
 		}
 
 		[Fact]

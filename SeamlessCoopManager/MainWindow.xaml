@@ -127,7 +127,16 @@
                     Grid.Column="0"
                     Header="Session Password"
                     PlaceholderText="Enter Session Password"
-                    IsReadOnly="False"/>
+                    IsEnabled="False"
+                    TextChanged="SessionPassword_TextChanged" />
+
+                <Button
+                    x:Name="SavePasswordButton"
+                    Grid.Column="1"
+                    VerticalAlignment="Bottom"
+                    Content="Save"
+                    IsEnabled="False"
+                    Click="SavePassword_Click" />
             </Grid>
 
             <!-- Game executable -->

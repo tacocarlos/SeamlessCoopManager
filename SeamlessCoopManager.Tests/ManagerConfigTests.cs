@@ -43,6 +43,25 @@ namespace SeamlessCoopManager.Tests
 		}
 
 		[Fact]
+		public void Load_GameMissingFromConfigHasPreviousPathsCleared()
+		{
+			var (configPath, _) = WriteConfigForAllGames();
+			string staleDir = MakeDir("stale");
+			string staleExe = MakeFile("x", "stale", "ersc_launcher.exe");
+			Game.ELDEN_RING.Options.SetInstallPath(staleDir);
+			Game.ELDEN_RING.Options.SetExecPath(staleExe);
+			Game.ELDEN_RING.Options.SetRetainOptions(false);
+			File.WriteAllText(configPath, "[DSR]\r\nInstallPath = \r\nExecPath = \r\nRetainOptions = True\r\n");
+
+			Game.LoadManagerConfig(configPath);
+
+			// Steam lookup may legitimately find a real install, but never the stale temp folder.
+			Assert.NotEqual(staleDir, Game.ELDEN_RING.Options.InstallPath);
+			Assert.Null(Game.ELDEN_RING.Options.ExecPath);
+			Assert.True(Game.ELDEN_RING.Options.RetainOptions);
+		}
+
+		[Fact]
 		public void Load_ReadsPasswordFromSeamlessCoopSettings()
 		{
 			var (configPath, installDirs) = WriteConfigForAllGames();

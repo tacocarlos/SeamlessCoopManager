@@ -23,12 +23,18 @@ namespace SeamlessCoopManager.Manager
 		public static IniData MergeIniData(FileIniDataParser parser, string userIniPath, string modIniPath)
 		{
 			IniData mod = parser.ReadFile(modIniPath);
-			if(File.Exists(userIniPath)) 
+			if (File.Exists(userIniPath))
 			{
 				IniData user = parser.ReadFile(userIniPath);
 				mod.Merge(user);
 			}
 			return mod;
+		}
+		
+		public static IniData SetSessionPassword(IniData currentData, string newPassword, string passwordSectionName="PASSWORD", string passwordFieldName = "cooppassword")
+		{
+			currentData[passwordSectionName][passwordFieldName] = newPassword;
+			return currentData;
 		}
 
 		public string GetRelativeSettingsIniPath();
